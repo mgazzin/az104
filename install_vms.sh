@@ -1,5 +1,9 @@
 #!/bin/bash
 
+yum -y update
+
+exit 0
+
 echo "Disabling SELINUX"
 
 setenforce 0 >> /tmp/setenforce.out
