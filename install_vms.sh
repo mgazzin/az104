@@ -12,3 +12,15 @@ cat /etc/selinux/config > /tmp/afterSeLinux.out
 
 setenforce 0
 
+dnf -y install nginx
+
+systemctl enable nginx
+systemctl start nginx
+
+
+firewall-cmd --permanent --add-service=http
+
+firewall-cmd --reload
+
+hostname=$(hostname)
+echo "<h1> This is $hostname </h1>" > /usr/share/nginx/html/index.html
