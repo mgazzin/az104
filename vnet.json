@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "networkname": {
+      "type": "string",
+      "defaultValue": "mg-FEBE104-VNET",
+      "metadata": {
+        "description": "Name of Virtual Network"
+      }
+    },
+    "networkaddress": {
+      "type": "string",
+      "defaultValue": "10.6.0.0/16",
+      "metadata": {
+        "description": "Address of Virtual Network"
+      }
+    },
+    "subnet1": {
+      "type": "string",
+      "defaultValue": "mgFEBE104SNET1",
+      "metadata": {
+        "description": "Name of subnet"
+      }
+    },
+    "subnetaddress1": {
+      "type": "string",
+      "defaultValue": "10.6.0.0/24",
+      "metadata": {
+        "description": "Subnet address range"
+      }
+    },
+    "subnet2": {
+      "type": "string",
+      "defaultValue": "mgFEBE104SNET2",
+      "metadata": {
+        "description": "Name of subnet"
+      }
+    },
+    "subnetaddress2": {
+      "type": "string",
+      "defaultValue": "10.6.1.0/24",
+      "metadata": {
+        "description": "Subnet address range"
+      }
+    }
+
+  },
+  "resources": [
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[parameters('networkname')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('networkaddress')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[parameters('subnet1')]",
+            "properties": {
+              "addressPrefix": "[parameters('subnetaddress1')]"
+            }
+          },
+          {
+            "name": "[parameters('subnet2')]",
+            "properties": {
+              "addressPrefix": "[parameters('subnetaddress2')]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,415 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+
+  "parameters": {
+    "environmentPrefixName": {
+      "type": "string",
+      "maxLength": 7,
+      "metadata": {
+        "description": "Prefix of the environment."
+      },
+      "defaultValue": "mgfebe"
+    },
+    "vNetResourceGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of resource group with VNET."
+      },
+      "defaultValue": "mg-FEBE104-RG-WEU"
+    },
+    "vNetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of Virtual Network where you want to deploy the VMs."
+      },
+      "defaultValue": "mg-FEBE104-VNET"
+    },
+
+    "vNetSNName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of Virtual Network Subnet where you want to deploy the VMs."
+      },
+      "defaultValue": "mgFEBE104SNET1"
+    },
+
+    "networkSecurityGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "Network security group."
+      },
+      "defaultValue": "/subscriptions/8c6d561d-8c86-4229-8335-a17d14a1b7ed/resourceGroups/mg-FEBE104-RG-WEU/providers/Microsoft.Network/networkSecurityGroups/mg-FEBE104-NSG-FE"
+    },
+
+    "adminUserName": {
+      "type": "string",
+      "metadata": {
+        "description": "User name for local administrator account."
+      },
+      "defaultValue": ""
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for local adminstrator account."
+      },
+      "defaultValue": ""
+    },
+    "vmWebCount": {
+      "type": "int",
+      "minValue": 2,
+      "maxValue": 9,
+      "metadata": {
+        "description": "Number of frontend virtual machines behind a loadbalancer."
+      },
+      "defaultValue": 2
+    },
+    "fileUris": {
+      "type": "string",
+      "metadata": {
+        "description": "URL to bash script"
+      },
+      "defaultValue": "https://raw.githubusercontent.com/mgazzin/az104/master/install_vms.sh"
+    },
+    "commandToExecute": {
+      "type": "string",
+      "metadata": {
+        "description": "Command to execute script"
+      },
+      "defaultValue": "sh install_vms.sh"
+    }
+  },
+  "variables": {
+    "computeApiVersion": "2016-03-30",
+    "networkApiVersion": "2016-06-01",
+    "storageApiVersion": "2016-01-01",
+
+    "imagePublisher": "OpenLogic",
+    "imageVersion": "latest",
+    "imageSKU": "7.2",
+    "imageOffer": "CentOS",
+
+    "publicIPAddressName": "[concat(parameters('environmentPrefixName'), '.LBPUBLICIP')]",
+    "publicIPAddressID": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]",
+    "lbID": "[resourceId('Microsoft.Network/loadBalancers',variables('lbWebName'))]",
+    "location": "[resourceGroup().location]",
+
+    "saVhdName": "[concat(parameters('environmentPrefixName'), uniqueString(resourceGroup().id))]",
+    "storageAccountType": "Standard_LRS",
+    "vNetID": "[resourceId(parameters('vNetResourceGroup'), 'Microsoft.Network/virtualNetworks', parameters('vNetName'))]",
+    "vNetSNRef": "[concat(variables('vNetID'), '/subnets/', parameters('vNetSNName'))]",
+    "vmWeb0xComputerName": "[concat(parameters('environmentPrefixName'), 'web0')]",
+    "asWebName": "[concat(parameters('environmentPrefixName'), '.ASWEB')]",
+    "lbWebName": "[concat(parameters('environmentPrefixName'), '.LBWEB')]",
+    "nicWeb0xName": "[concat(parameters('environmentPrefixName'), '.NICWEB0')]",
+    "vmWeb0xName": "[concat(parameters('environmentPrefixName'), '.VMWEB0')]",
+    "vmWebSize": "Standard_B1s"
+  },
+
+  "resources": [
+    {
+      "apiVersion": "[variables('storageApiVersion')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('saVhdName')]",
+      "location": "[variables('location')]",
+      "sku": {
+        "name": "[variables('storageAccountType')]"
+      },
+      "kind": "Storage",
+      "properties": {}
+    },
+    {
+      "apiVersion": "[variables('computeApiVersion')]",
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "[variables('asWebName')]",
+      "location": "[variables('location')]",
+      "dependsOn": [],
+      "properties": {
+      }
+    },
+
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('publicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[concat(variables('publicIPAddressName'), copyIndex())]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      },
+      "copy": {
+        "name": "vmPubIPCopy",
+        "count": "[parameters('vmWebCount')]"
+      }
+    },
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/loadBalancers",
+      "name": "[variables('lbWebName')]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'))]"
+      ],
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "lbFrontEnd",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[variables('publicIPAddressID')]"
+              }
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "lbBackEnd"
+          }
+        ],
+        "inboundNatRules": [
+        ],
+        "loadBalancingRules": [
+          {
+            "name": "HTTPS",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/frontendIPConfigurations/lbFrontEnd')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/backendAddressPools/lbBackEnd')]"
+              },
+              "protocol": "Tcp",
+              "frontendPort": 443,
+              "backendPort": 443,
+              "enableFloatingIP": false,
+              "idleTimeoutInMinutes": 5,
+              "loadDistribution": "Default",
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/probes/httpsProbe')]"
+              }
+            }
+          },
+          {
+            "name": "HTTP",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/frontendIPConfigurations/lbFrontEnd')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/backendAddressPools/lbBackEnd')]"
+              },
+              "protocol": "Tcp",
+              "frontendPort": 80,
+              "backendPort": 80,
+              "enableFloatingIP": false,
+              "idleTimeoutInMinutes": 5,
+              "loadDistribution": "Default",
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/probes/httpProbe')]"
+              }
+            }
+          }
+        ],
+        "probes": [
+          {
+            "name": "httpsProbe",
+            "properties": {
+              "protocol": "Http",
+              "port": 443,
+              "requestPath": "/",
+              "intervalInSeconds": 5,
+              "numberOfProbes": 2
+            }
+          },
+          {
+            "name": "httpProbe",
+            "properties": {
+              "protocol": "Http",
+              "port": 80,
+              "requestPath": "/",
+              "intervalInSeconds": 5,
+              "numberOfProbes": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/loadBalancers/inboundNatRules",
+      "name": "[concat(variables('lbWebName'), '/', 'SSH-VM', copyIndex())]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "lbNatLoop",
+        "count": "[parameters('vmWebCount')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/loadBalancers/', variables('lbWebName'))]"
+      ],
+      "properties": {
+        "frontendIPConfiguration": {
+          "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/frontendIPConfigurations/lbFrontEnd')]"
+        },
+        "protocol": "tcp",
+        "frontendPort": "[copyIndex(5000)]",
+        "backendPort": 22,
+        "enableFloatingIP": false
+      }
+    },
+    {
+      "apiVersion": "[variables('networkApiVersion')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('nicWeb0xName'), copyIndex())]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName'))]",
+        "[concat('Microsoft.Network/loadBalancers/', variables('lbWebName'), '/inboundNatRules/', 'SSH-VM', copyIndex())]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'), copyIndex())]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('vNetSNRef')]"
+              },
+              "publicIPAddress": {
+                  "id": "[concat(variables('publicIPAddressID'), copyIndex())]"
+              },
+              "loadBalancerBackendAddressPools": [
+                {
+                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('lbWebName')),'/backendAddressPools/lbBackEnd')]"
+                }
+              ],
+              "loadBalancerInboundNatRules": [
+                {
+                  "id": "[concat(variables('lbID'),'/inboundNatRules/SSH-VM', copyindex())]"
+                }
+              ]
+            }
+          }
+        ],
+        "dnsSettings": {
+          "dnsServers": [
+          ]
+        },
+        "networkSecurityGroup": {
+            "id": "[parameters('networkSecurityGroup')]"
+        }
+      },
+      "copy": {
+        "name": "vmCopy",
+        "count": "[parameters('vmWebCount')]"
+      }
+    },
+    {
+      "apiVersion": "[variables('computeApiVersion')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('vmWeb0xName'), copyIndex())]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Storage/storageAccounts/', variables('saVhdName'))]",
+        "[concat('Microsoft.Compute/availabilitySets/', variables('asWebName'))]",
+        "[concat('Microsoft.Network/networkInterfaces/', concat(variables('nicWeb0xName'), copyIndex()))]"
+      ],
+      "properties": {
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('asWebName'))]"
+        },
+        "hardwareProfile": {
+          "vmSize": "[variables('vmWebSize')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSKU')]",
+            "version": "[variables('imageVersion')]"
+          },
+          "osDisk": {
+            "name": "[concat(concat( variables('vmWeb0xName'), copyIndex() ), '-osdisk')]",
+            "vhd": {
+              "uri": "[concat('http://', variables('saVhdName'), '.blob.core.windows.net/vhds/', concat(concat( variables('vmWeb0xName'), copyIndex() ), '-osdisk.vhd'))]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          },
+
+          "dataDisks": [
+            {
+              "name": "[concat(concat( variables('vmWeb0xName'), copyIndex() ), '-datadisk')]",
+              "diskSizeGB": "1023",
+              "lun": 0,
+              "vhd": {
+                "uri": "[concat('http://', variables('saVhdName'), '.blob.core.windows.net/vhds/', concat(concat( variables('vmWeb0xName'), copyIndex() ), '-datadisk.vhd'))]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            }
+          ]
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('vmWeb0xComputerName'), copyIndex())]",
+          "adminUsername": "[parameters('adminUserName')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('nicWeb0xName'), copyIndex()))]",
+              "properties": { "primary": true }
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": "true",
+            "storageUri": "[concat('http://', variables('saVhdName'), '.blob.core.windows.net')]"
+          }
+        }
+      },
+      "resources": [
+      ],
+      "copy": {
+        "name": "vmCopy",
+        "count": "[parameters('vmWebCount')]"
+      }
+    },
+    {
+      "apiVersion": "[variables('computeApiVersion')]",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(concat(variables('vmWeb0xName'), copyIndex()),'/CustomScript')]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines/', concat(variables('vmWeb0xName'), copyIndex()))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "CustomScript",
+        "typeHandlerVersion": "2.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+        },
+        "protectedSettings": {
+          "commandToExecute": "[parameters('commandToExecute')]",
+          "fileUris": "[split(parameters('fileUris'), ' ')]"
+        }
+      },
+      "copy": {
+        "name": "vmCopy",
+        "count": "[parameters('vmWebCount')]"
+      }
+    }
+  ]
+}
