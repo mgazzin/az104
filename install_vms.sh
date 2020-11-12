@@ -2,7 +2,6 @@
 
 yum -y update
 
-exit 0
 
 echo "Disabling SELINUX"
 
@@ -12,6 +11,8 @@ sed -i 's^SELINUX=enforcing^SELINUX=disabled^g' /etc/selinux/config || true
 cat /etc/selinux/config > /tmp/afterSeLinux.out
 
 setenforce 0
+
+exit 0
 
 yum makecache fast
 
